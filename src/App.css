@@ -1,0 +1,135 @@
+/** Global**/
+*{
+  margin:0px;
+  padding: 0px;
+}
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  animation: App-logo-spin infinite 20s linear;
+  height: 40vmin;
+  pointer-events: none;
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vertical-center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/** Header **/
+header {
+  width: 100%;
+  background: #2f5bea;
+  color: #fff;
+}
+
+header h1 {
+  padding:10px 0px;
+  margin: 0px;
+}
+
+/** Footer **/
+footer {
+  width:100%;
+  background: #f2f5ff;
+}
+
+footer p {
+  font-size: 12px;
+  padding: 15px 0px;
+  margin-bottom: 0px;
+}
+
+/** POST-List **/
+
+.post-row {
+   border-bottom: 1px solid #ccc;
+   margin-bottom: 50px;
+   padding-bottom: 50px;
+}
+
+.post-row:last-child {
+  border-bottom: none;
+}
+
+.content-title {
+  text-align: left;
+}
+
+.content-para {
+  text-align: justify;
+}
+
+.action-box {
+  padding: 0px 2px;
+}
+
+.content-box {
+  padding: 20px 0px;
+}
+
+/** Edit Page **/
+
+.edit-page,.update-page,.delete-page{
+  padding: 50px 0px;
+  min-height: 750px;
+  text-align: left;
+}
+
+.go-home-button {
+  margin-top: 50px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
