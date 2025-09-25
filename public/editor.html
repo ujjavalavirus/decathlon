@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCX Viewer, Editor & Renderer</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    
+    <!-- Quill.js for Rich Text Editing (Bootstrap-compatible) -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    
+    <!-- Quill Better Table CSS for Table Support -->
+    <link href="https://unpkg.com/quill-better-table@1.2.10/dist/quill-better-table.css" rel="stylesheet">
+    
+    <!-- Mammoth.js for DOCX to HTML conversion -->
+    <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    
+    <!-- JSZip for handling ZIP (DOCX is ZIP-based), if needed -->
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+    
+    <!-- Quill.js -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    
+    <!-- Quill Better Table JS for Editable Tables -->
+    <script src="https://unpkg.com/quill-better-table@1.2.10/dist/quill-better-table.min.js"></script>
+    
+    <style>
+        #editor {
+            height: 400px;
+            margin-top: 20px;
+        }
+        .ql-container {
+            font-family: 'Times New Roman', serif;
+            font-size: 12pt;
+        }
+        #preview {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+            min-height: 400px;
+        }
+        /* Styles for tables in preview and editor */
+        #preview table, .ql-better-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        #preview th, #preview td, .ql-better-table td, .ql-better-table th {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #preview th, .ql-better-table th {
+            background-color: #f2f2f2;
+        }
+        /* Fallback styles for static tables in editor */
+        .ql-editor table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .ql-editor td, .ql-editor th {
+            border: 1px solid #ccc;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">DOCX Viewer, Editor & Renderer</h1>
+        <p class="lead">Upload a DOCX file to view, edit, and render its content. Tables now convert to editable format in correct order.</p>
+        
+        <!-- File Upload -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Upload DOCX File</h5>
+                        <input type="file" id="docxFile" class="form-control" accept=".docx" />
+                        <button id="loadBtn" class="btn btn-primary mt-2" disabled>Load & View</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Viewer/Renderer Section -->
+        <div class="row mb-4" id="viewerSection" style="display: none;">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="view-tab" data-bs-toggle="tab" href="#view">View/Render</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="edit-tab" data-bs-toggle="tab" href="#edit">Edit</a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content">
+                            <!-- View/Render Tab -->
+                            <div class="tab-pane fade show active" id="view">
+                                <h5>Rendered Content (HTML from DOCX)</h5>
+                                <div id="preview"></div>
+                                <button id="downloadHtml" class="btn btn-success mt-2">Download as HTML</button>
+                            </div>
+                            
+                            <!-- Edit Tab -->
+                            <div class="tab-pane fade" id="edit">
+                                <h5>Edit Content (Tables fully editable: insert, resize, merge cells)</h5>
+                                <div id="editor"></div>
+                                <button id="saveEdit" class="btn btn-primary mt-2">Update Preview</button>
+                                <button id="downloadEdited" class="btn btn-success mt-2 ms-2">Download Edited HTML</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status Messages -->
+        <div id="status" class="alert alert-info mt-3" style="display: none;"></div>
+    </div>
+    
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    
+    <script>
+        let quill;
+        let currentHtml = '';
+        
+        // Initialize Quill Editor with Custom Table Matcher
+        function initializeQuillEditor() {
+            const editorElement = document.getElementById('editor');
+            if (!editorElement || typeof Quill === 'undefined') {
+                console.error('Editor element or Quill not ready.');
+                return;
+            }
+            
+            if (typeof QuillBetterTable === 'undefined') {
+                console.error('QuillBetterTable not loaded. Using fallback (static tables).');
+                // Fallback Quill without table module
+                quill = new Quill(editorElement, {
+                    theme: 'snow',
+                    modules: {
+                        toolbar: [
+                            [{ 'header': [1, 2, 3, false] }],
+                            ['bold', 'italic', 'underline'],
+                            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                            ['link', 'image'],
+                            [{ 'align': [] }],
+                            ['clean']
+                        ],
+                        clipboard: {
+                            matchVisual: false,
+                        }
+                    }
+                });
+                return;
+            }
+            
+            Quill.register('modules/better-table', QuillBetterTable);
+            console.log('Quill Better Table registered successfully.');
+            
+            quill = new Quill(editorElement, {
+                theme: 'snow',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, 3, false] }],
+                        ['bold', 'italic', 'underline'],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        ['link', 'image'],
+                        [{ 'align': [] }],
+                        ['better-table'],
+                        ['clean']
+                    ],
+                    'better-table': {
+                        operationMenu: {
+                            items: {
+                                unmergeCells: { text: 'Unmerge cells' },
+                            },
+                        },
+                    },
+                    keyboard: {
+                        bindings: QuillBetterTable.keyboardBindings,
+                    },
+                    clipboard: {
+                        matchVisual: false,
+                    }
+                }
+            });
+            
+            // Custom clipboard matcher for TABLE nodes (key fix for conversion & order)
+            if (quill && QuillBetterTable && QuillBetterTable.utils && QuillBetterTable.utils.tableToDelta) {
+                quill.clipboard.addMatcher(Node.ELEMENT_NODE, function(node, delta) {
+                    if (node.tagName === 'TABLE') {
+                        console.log('Converting HTML table to editable Quill table...');
+                        try {
+                            // Use library utility to convert HTML table node to Delta (preserves structure & content)
+                            const tableDelta = QuillBetterTable.utils.tableToDelta(node);
+                            if (tableDelta) {
+                                return tableDelta;
+                            } else {
+                                console.warn('Table conversion failed; falling back to HTML.');
+                                // Fallback: Convert to static HTML Delta
+                                return new Quill.imports.delta().insert({ table: node.outerHTML });
+                            }
+                        } catch (err) {
+                            console.error('Table matcher error:', err);
+                            // Ultimate fallback: Plain text from table
+                            let tableText = '';
+                            node.querySelectorAll('td, th').forEach(cell => {
+                                tableText += cell.textContent + '\t';
+                            });
+                            node.querySelectorAll('tr').forEach(() => tableText += '\n');
+                            return new Quill.imports.delta().insert(tableText);
+                        }
+                    }
+                    return delta; // Pass through other nodes unchanged (preserves order)
+                });
+                console.log('Custom table matcher added for editable conversion.');
+            } else {
+                console.warn('Table utils not available; tables will be static HTML.');
+            }
+        }
+        
+        // Initialize on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeQuillEditor);
+        } else {
+            initializeQuillEditor();
+        }
+        
+        // Load DOCX and insert into editor (single paste preserves order)
+        function loadDocxContent(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const arrayBuffer = event.target.result;
+                mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                    .then(function(result) {
+                        currentHtml = result.value;
+                        document.getElementById('preview').innerHTML = currentHtml;
+                        
+                        // Load into editor: Single paste with matcher handling tables
+                        if (quill) {
+                            quill.setText(''); // Clear
+                            quill.clipboard.dangerouslyPasteHTML(0, currentHtml, 'user');
+                            console.log('Full content pasted into editor with table conversion.');
+                        } else {
+                            console.error('Quill not ready; retrying init.');
+                            initializeQuillEditor();
+                            setTimeout(() => quill.clipboard.dangerouslyPasteHTML(0, currentHtml, 'user'), 200);
+                        }
+                        
+                        document.getElementById('viewerSection').style.display = 'block';
+                        showStatus('DOCX loaded successfully! Switch to Edit tab—tables should be editable in order.', 'success');
+                        
+                        if (result.messages.length > 0) {
+                            console.warn('Mammoth warnings:', result.messages);
+                        }
+                    })
+                    .catch(function(err) {
+                        console.error('Mammoth error:', err);
+                        showStatus('Error loading DOCX: ' + err.message, 'danger');
+                    });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // File Upload Handler
+        document.getElementById('docxFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.name.endsWith('.docx')) {
+                document.getElementById('loadBtn').disabled = false;
+            } else {
+                document.getElementById('loadBtn').disabled = true;
+                showStatus('Please select a valid .docx file.', 'warning');
+            }
+        });
+        
+        // Load DOCX File
+        document.getElementById('loadBtn').addEventListener('click', function() {
+            const fileInput = document.getElementById('docxFile');
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            showStatus('Loading DOCX file...', 'info');
+            
+            if (!quill) {
+                initializeQuillEditor();
+                setTimeout(() => loadDocxContent(file), 300); // Delay for init & matcher setup
+                return;
+            }
+            
+            loadDocxContent(file);
+        });
+        
+        // Update Preview from Editor
+        document.getElementById('saveEdit').addEventListener('click', function() {
+            if (quill) {
+                currentHtml = quill.root.innerHTML;
+                document.getElementById('preview').innerHTML = currentHtml;
+                showStatus('Preview updated! Order and tables preserved.', 'success');
+            }
+        });
+        
+        // Downloads
+        document.getElementById('downloadHtml').addEventListener('click', function() {
+            downloadFile(currentHtml, 'rendered.html', 'text/html');
+        });
+        
+        document.getElementById('downloadEdited').addEventListener('click', function() {
+            if (quill) {
+                const editedHtml = quill.root.innerHTML;
+                downloadFile(editedHtml, 'edited.html', 'text/html');
+            }
+        });
+        
+        // Utilities
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `alert alert-${type}`;
+            statusEl.style.display = 'block';
+            setTimeout(() => statusEl.style.display = 'none', 5000);
+        }
+        
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
